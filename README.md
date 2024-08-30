@@ -1,6 +1,6 @@
 # AI 聊天 API
 
-本项目提供了一个 AI 聊天功能的 API 接口，利用 yeschat.ai 服务。它使用 FastAPI 构建，可以作为独立应用程序、Docker 容器或在 Vercel 上部署。
+yeschat.ai 服务逆向接口，接口适配openai chat api。它使用 FastAPI 构建，可以作为独立应用程序、Docker 容器或在 Vercel 上部署。
 
 ## 功能特点
 
