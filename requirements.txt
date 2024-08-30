@@ -1,0 +1,7 @@
+requests
+uvicorn
+fastapi
+pydantic
+python-dotenv
+starlette
+pyinstaller
