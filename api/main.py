@@ -169,12 +169,17 @@ async def chat_completions(
 
             async def generate():
                 for line in response.iter_lines():
+                    print(line.decode("utf-8"))
                     if line and line.decode("utf-8") != "[DONE]":
                         content = line.decode("utf-8")
                         json_data = json.loads(content)
                         data = json_data["data"]["message"]
-                        yield f"data: {json.dumps(simulate_data(data, 'gpt-4o-mini'))}\n\n"
-                yield f"data: {json.dumps(stop_data('', 'gpt-4o-mini'))}\n\n"
+                        if 'url' in json_data["data"]:
+                            url = json_data["data"]["url"] 
+                            markdown_url = '![](' + url + ')'
+                            yield f"data: {json.dumps(simulate_data(markdown_url, 'gpt-4o'))}\n\n"
+                        yield f"data: {json.dumps(simulate_data(data, 'gpt-4o'))}\n\n"
+                yield f"data: {json.dumps(stop_data('', 'gpt-4o'))}\n\n"
                 yield "data: [DONE]\n\n"
                 logger.info("Stream completed")
 
