@@ -1,7 +1,7 @@
-requests
-uvicorn
 fastapi
+httpx
 pydantic
+pyinstaller
 python-dotenv
 starlette
-pyinstaller
+uvicorn

@@ -1,11 +1,12 @@
+import asyncio
 import json
 import logging
 import os
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-import requests
+import httpx
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends
@@ -98,6 +99,23 @@ def stop_data(content, model):
         ],
         "usage": None,
     }
+    
+    
+def create_chat_completion_data(content: str, model: str, finish_reason: Optional[str] = None) -> Dict[str, Any]:
+    return {
+        "id": f"chatcmpl-{uuid.uuid4()}",
+        "object": "chat.completion.chunk",
+        "created": int(datetime.now().timestamp()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"content": content, "role": "assistant"},
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": None,
+    }
 
 
 def verify_app_secret(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -155,61 +173,55 @@ async def chat_completions(
 
     headers["uniqueid"] = uuid_str
 
-    try:
-        response = requests.post(
-            f"{BASE_URL}/api/v1/gpt2/free-gpt2/chat",
-            headers=headers,
-            json=json_data,
-            stream=True,
-            timeout=120,
-        )
-        response.raise_for_status()
-        if request.stream:
-            logger.info("Streaming response")
+    async def generate():
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream('POST', f'{BASE_URL}/api/v1/gpt2/free-gpt2/chat', headers=headers, json=json_data, timeout=120.0) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line and line != "[DONE]":
+                            content = json.loads(line)["data"]
+                            if 'url' in content:
+                                markdown_url = "\n ![](" + content['url'] + ") \n"
+                                yield f"data: {json.dumps(create_chat_completion_data(markdown_url, request.model))}\n\n"
+                            yield f"data: {json.dumps(create_chat_completion_data(content['message'], request.model))}\n\n"
+                    yield f"data: {json.dumps(create_chat_completion_data('', request.model, 'stop'))}\n\n"
+                    yield "data: [DONE]\n\n"
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error occurred: {e}")
+                raise HTTPException(status_code=e.response.status_code, detail=str(e))
+            except httpx.RequestError as e:
+                logger.error(f"An error occurred while requesting: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
 
-            async def generate():
-                for line in response.iter_lines():
-                    print(line.decode("utf-8"))
-                    if line and line.decode("utf-8") != "[DONE]":
-                        content = line.decode("utf-8")
-                        json_data = json.loads(content)
-                        data = json_data["data"]["message"]
-                        if 'url' in json_data["data"]:
-                            url = json_data["data"]["url"] 
-                            markdown_url = '![](' + url + ')'
-                            yield f"data: {json.dumps(simulate_data(markdown_url, 'gpt-4o'))}\n\n"
-                        yield f"data: {json.dumps(simulate_data(data, 'gpt-4o'))}\n\n"
-                yield f"data: {json.dumps(stop_data('', 'gpt-4o'))}\n\n"
-                yield "data: [DONE]\n\n"
-                logger.info("Stream completed")
+    if request.stream:
+        logger.info("Streaming response")
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    else:
+        logger.info("Non-streaming response")
+        full_response = ""
+        async for chunk in generate():
+            if chunk.startswith("data: ") and not chunk[6:].startswith("[DONE]"):
+                # print(chunk)
+                data = json.loads(chunk[6:])
+                if data["choices"][0]["delta"].get("content"):
+                    full_response += data["choices"][0]["delta"]["content"]
+        
+        return {
+            "id": f"chatcmpl-{uuid.uuid4()}",
+            "object": "chat.completion",
+            "created": int(datetime.now().timestamp()),
+            "model": request.model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": full_response},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": None,
+        }
 
-            return StreamingResponse(generate(), media_type="text/event-stream")
-        else:
-            logger.info("Non-streaming response")
-            full_response = ""
-            for line in response.iter_lines():
-                if line and line.decode("utf-8") != "[DONE]":
-                    full_response += json.loads(line.decode("utf-8"))["data"]["message"]
-            logger.info("Response generated successfully")
-            return {
-                "id": f"chatcmpl-{uuid.uuid4()}",
-                "object": "chat.completion",
-                "created": int(datetime.now().timestamp()),
-                "model": request.model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": full_response},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": None,
-            }
-    except requests.RequestException as e:
-        logger.error(f"Error communicating with Yes2Api: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error communicating with Yes2Api: {str(e)}"
-        )
 
 
 if __name__ == "__main__":
