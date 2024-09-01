@@ -58,7 +58,7 @@ yeschat.ai 服务逆向接口，接口适配openai chat api。它使用 FastAPI 
 
 ## 使用方法
 
-向 `/v1/chat/completions` 发送 POST 请求，请求体中包含聊天消息和模型规格的 JSON。在 Authorization 头中包含你的 Bear APP_SECRET。
+向 `/v1/chat/completions` 发送 POST 请求，请求体中包含聊天消息和模型规格的 JSON。在 Authorization 头中包含你的 `Bearer APP_SECRET`。
 示例：
 
 ```json
