@@ -1,3 +1,5 @@
+# 已失效
+
 # AI 聊天 API
 
 yeschat.ai 服务逆向接口，接口适配openai chat api。它使用 FastAPI 构建，可以作为独立应用程序、Docker 容器或在 Vercel 上部署。
